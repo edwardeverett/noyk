@@ -1,0 +1,625 @@
+ <html>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<meta name="viewport" content="width=device-width, user-scalable=no">
+
+<link rel="shortcut icon" href="favicon.ico" type="image/x-icon" />
+
+<script type="text/javascript" src="js/jquery-2.1.0.min.js" ></script>
+<script type="text/javascript" src="js/ZeroClipboard.min.js" ></script>
+<script type="text/javascript" src="js/chars.js" ></script>
+
+
+<script type="text/javascript">
+
+	var client;
+	var noFlash = true;
+	var touch = false;
+	var testNoFlash = false;
+	var el; //clicked element
+	var cleanUpTimeout;
+	
+	if(navigator.userAgent.match(/(iPod|iPhone|iPad)/i) || navigator.userAgent.indexOf('Android') != -1){
+		touch = true;
+	}
+		
+	//touch = true;
+		
+	$().ready(function(){
+
+		//build UI		
+		if(!touch){
+			buildRecent();				
+			buildUI();
+			
+			//set up ZeroClipboard. Flash or no flash here. 
+			setupZeroClipboard();
+			
+			//add a click handler to the whole page and delegate clicks
+			
+			$("#page").click(function(e){UIclickHandler(e)});
+		}
+		else{
+		
+			document.body.className = "touchUI";
+		
+			var msg = document.createElement("DIV");
+				msg.className = "warningMsg";
+				msg.innerHTML = "One-click copying isn't supported on mobiles or tables so you might be a bit underwhelmed. Why not save notonyourkeyboard.com to your bookmarks and try next time you're on a computer?";
+		
+		
+			document.getElementById("page").appendChild(msg);
+			
+			$(".recent").remove()
+			
+			buildUI();
+		
+		}
+		
+	});	
+
+function UIclickHandler(e){
+	
+	//clean up
+	cleanup();
+	
+	//$("INPUT").removeClass("selected");	
+	//$("#page").removeClass("copied")
+	
+	el = (e.target) ? e.target : e;
+	
+	//el = e;
+	
+	var clickedChar = null;
+	
+	var isRecent = false;
+	
+	console.log(el.tagName);
+	
+	
+	//if(el.parentNode == undefined){debugger}
+	
+	if(el.parentNode.parentNode.id == "recentList"){
+		isRecent = true;
+	}
+	
+	if(el.tagName == "INPUT"){
+		clickedChar = el.value;
+		$(el).addClass("selected");
+		
+		var text = "copied";
+		if(noFlash)
+			text = "ctrl&nbsp;+&nbsp;c";
+			
+		var label = document.createElement("label");
+		label.innerHTML = text;
+		el.parentNode.appendChild(label);
+
+	//ANALYTICS
+	_gaq.push(['_trackEvent','Character','click',el.value]);
+		
+	}
+	
+	if(!touch && el.tagName != undefined && el.tagName != "LABEL" && el.tagName != "INPUT"){
+		$("#page input").removeClass("selected");	
+	}
+
+	if(!touch && noFlash && el.tagName == "INPUT"){
+		selectText(el);
+	}
+	
+	if(clickedChar){
+		
+		if(!isRecent){
+		
+			var cookieName = "recentlyUsedChars";
+			var encodedOldCookieValue = readCookie(cookieName);
+			
+			var oldCookieValue = decodeURIComponent(encodedOldCookieValue);
+			
+			if(oldCookieValue == "null")
+				oldCookieValue = "";
+			
+			//remove character if it exists in recently used.
+			if(oldCookieValue && oldCookieValue.match(clickedChar) != -1)
+				oldCookieValue = oldCookieValue.replace(clickedChar,"");
+				
+			//add character to front of recently used.
+			var newCookieValue = (oldCookieValue) ? clickedChar + oldCookieValue.substring(0,14) : clickedChar;
+			
+			var encodedNewCookieValue = encodeURIComponent(newCookieValue)
+			
+			createCookie(cookieName,encodedNewCookieValue);
+			
+			buildRecent();	
+			//setupZeroClipboard()
+		}
+		
+	}else{
+	
+		
+	}
+	
+	//start timer
+	cleanUpTimeout = timeoutID = window.setTimeout(cleanup, 8000);
+	
+};
+
+function buildUI(){
+
+	for (var key in chars){
+		
+			//titles
+			var sectionTitleEl = document.createElement("h2");			
+			sectionTitleEl.innerHTML = key;			
+			document.getElementById("page").appendChild(sectionTitleEl);
+			
+			var listEl = document.createElement("ul");			
+			
+			for (var i = 0; i < chars[key].length; i++){			
+			
+				if(chars[key][i] == "break"){
+					$(listEl.lastChild).addClass("breakAfter")
+				}else{
+					listEl.appendChild(createLi(chars[key][i]))
+				}
+			}		
+		
+			document.getElementById("page").appendChild(listEl);		
+	}
+}
+
+function buildRecent(){
+	
+	var cookieString = decodeURIComponent(readCookie("recentlyUsedChars"));	
+	
+	if(cookieString != "null"){
+	
+		var recentUL = document.getElementById("recentList");
+
+		if(cookieString){
+			//destroy UI
+			recentUL.innerHTML = "";			
+			//get characters
+			var recentArray = cookieString.split("");					
+			//build UI
+			for (var i = 0; i < recentArray.length; i++){			
+				recentUL.appendChild(createLi(recentArray[i]));
+			}
+	
+		//add class for animation
+		$(recentUL).addClass("animateFirst");
+			
+		}
+	}
+}
+
+
+function setupZeroClipboard(){
+	
+	/*	*/
+	if(!testNoFlash)
+		client = new ZeroClipboard($("#page input"));
+	else
+		client = false;
+	
+	if(client){
+		client.on( 'load', function(client) {
+			
+			noFlash = false;
+			
+			client.on( 'datarequested', function(client) {
+			  client.setText(this.value);
+			 // debugger;
+			  $("#page input").removeClass("selected")
+			  this.className = "selected"
+			  
+			
+			} );
+
+			client.on( 'complete', function(client, args) {
+			  
+				UIclickHandler(this);
+			  
+			} );
+		  } );
+
+		  client.on( 'wrongflash noflash', function() {
+			ZeroClipboard.destroy();
+			noFlashUI();
+			
+		  });
+		
+	}
+	else
+
+		noFlashUI();
+	
+}
+
+
+function noFlashUI(){
+
+
+	$("#page").addClass("noFlash");
+	
+	$(document).click(function(e){
+	
+		//debugger;
+		$("LI LABEL").remove()	
+
+		UIclickHandler(e)
+	
+	});
+
+	if(!touch){
+
+		//detect Ctrl+C
+		var ctrlDown = false;
+		var ctrlKey = 17, cKey = 67;
+	
+		$(document).keydown(function(e){
+			if (e.keyCode == ctrlKey) ctrlDown = true;
+		}).keyup(function(e)
+		{
+			
+		});
+
+		$(document).keyup(function(e)
+		{
+			if (ctrlDown && (e.keyCode == cKey) && $(e.target).is(":focus")){
+				
+				$("LI LABEL").text("copied")
+				ctrlDown = false;	
+				
+			};
+		});
+	}
+}
+
+
+//helper functions
+
+function cleanup(){
+	$("INPUT").removeClass("selected");	
+	$("#page").removeClass("copied");
+	window.clearTimeout(cleanUpTimeout);
+}
+
+
+function createLi(c){
+
+	var li = document.createElement("li");
+
+	if(!touch){
+		var el = document.createElement("input");
+		el.readOnly = true;
+		el.value = c;	
+		el.type = "text";
+			
+		if(client)
+			client.clip(el);
+	
+		li.appendChild(el);
+	}
+	else{
+	li.innerHTML = c;
+	}
+	
+	
+	
+	return li;
+	
+}
+
+function selectText(element) {    
+		element.select();
+}
+	
+function createCookie(name,value){
+	var days = 10000;	
+	var date = new Date();
+	date.setTime(date.getTime()+(days*24*60*60*1000));
+	var expires = "; expires="+date.toGMTString();
+	
+	document.cookie = name+"="+value+expires+"; path=/";
+}
+
+function readCookie(name){
+	var nameEQ = name + "=";
+	var ca = document.cookie.split(';');
+	for(var i=0;i < ca.length;i++) {
+		var c = ca[i];
+		//debugger;
+		while (c.charAt(0)==' ') c = c.substring(1,c.length);
+		if (c.indexOf(nameEQ) == 0)
+			return c.substring(nameEQ.length,c.length);
+	}
+	return null;
+}
+
+	
+</script>
+
+<link href='http://fonts.googleapis.com/css?family=Lato:300' rel='stylesheet' type='text/css'>
+
+<style type="text/css">
+
+	html			{background-color:#fefefe;}
+
+	* 				{border:0; margin:0; padding:0;}
+	
+	h2				{margin-top:40px; margin-bottom:10px; font-weight:bold; font-size:1.2em;  text-shadow: 0px 0px 3px rgba(221, 221, 221, 1);}
+	
+	h1,
+	h2,
+	p				{color:#5c5c5c; font-family:lato, calibri, helvetica, verdana, arial, sans-serif; font-weight:normal; clear:both; width:100%; float:left;}
+
+	
+	#page			{margin:40px 60px; font-family:"arial unicode", sans-serif; padding-top:20px; float:left;}
+	
+	#header 		{background-color:#4a4a4a; padding:15px 60px;-webkit-box-shadow:4px 4px rgba(0,0,0,0.5); box-shadow:4px 4px rgba(0,0,0,0.5); position:fixed; width:100%; top:0; margin:0 -60px; z-index:10000;} 
+	#header h1 	{color:#f1f1f1; text-shadow: 0px 0px 3px rgba(241, 241, 241, 1); font-size:2em;}
+
+	.placeholder		{color:#9e9e9e; font-weight:normal; margin:15px 0 -10px 10px;}
+	
+	
+	ul				{margin-top:10px; margin-left:-10px; margin-bottom:10px;}
+	
+	li				{list-style:none; position:relative; float:left; vertical-align:middle; font-family:arial unicode, consolas, sans-serif; }
+	
+	.breakAfter + li		{clear:left;}
+	
+	
+	
+	
+	#page textarea,
+	#page span,
+	#page input	{font-size:1.6em; -webkit-box-shadow:4px 4px rgba(0,0,0,0.5); box-shadow:4px 4px rgba(0,0,0,0.5); margin:5px; width:40px; height:40px; text-align:center; background-color:#ededed;outline:none; display:block; position:relative; z-index:10; cursor:pointer;
+						transition: box-shadow 0.3s, margin 0.3s, width 0.3s, height 0.3s, font-size 0.3s;
+						color:#43425E; text-shadow: 0px 0px 3px rgba(204, 204, 204, 1);
+					}
+
+	
+	#page input:focus,
+	#page input.selected,
+	.copied#page input.selected 	{font-size:3.5em; width:120px; height:120px; margin:-35px; z-index:1000; box-shadow:8px 8px rgba(0,0,0,0.5);}
+	
+	
+	
+	.noFlash ::selection			{background:#0174FD; color:#ffffff;} 	
+	
+	li label 				{display:none;}
+	
+	li .selected + label {display:block; z-index:10001; position:absolute; top:55px; text-align:center; width:120px; margin-left:-35px;
+
+				-webkit-animation-name: copiedMsg;
+				-webkit-animation-duration: 0.8s;
+				-webkit-animation-timing-function: ease-out;
+				animation-name: copiedMsg;
+				animation-duration: 0.8s;
+				animation-timing-function: ease-out;
+	
+	}
+	
+	.noFlash li label {top:60px;}
+	
+	
+	#recentList li input {background-color:#CCE5FF;}
+	
+	#recentlist li:first-child	{ 
+				-webkit-animation-name: addLi;
+				-webkit-animation-duration: 0.3s;
+				-webkit-animation-timing-function: ease-in;
+				animation-name: addLi;
+				animation-duration: 0.3s;
+				animation-timing-function: ease-in;
+	}
+	
+	#about		{padding:20px 60px 40px; margin:40px 0 0 0; background-color:#ededed; float:left;}
+	#about h2	{margin-bottom:10px; margin-top:20px;}
+	#about	p	{margin-bottom:1em;}
+	#about	strong {display:block; font-weight:normal; font-style:italic;}
+	#end		{text-align:center; width:100%; font-size:4em; padding:55px 0 20px; color:#C7C7C7}
+	
+/* mobile */
+
+.touchUI #header h1	{font-size:1.5em;} 
+ 
+.warningMsg	{margin-top:30px; background-color:#FFF5C6; padding:20px; }
+
+
+.touchUI li	{width:2em; height:2em; margin:10px; line-height:2em; text-align:center; font-size:1.5em; border-width:1px; border-style:solid; border-color:transparent #ededed #ededed transparent;
+					color:#43425E; text-shadow: 0px 0px 3px rgba(204, 204, 204, 1);}
+
+.touchUI #page {margin:40px 15px;}
+	
+/* animations */	
+	
+@-webkit-keyframes addLi {
+   from { width:0;  }
+   to   { width:40px;   }
+}
+
+@-webkit-keyframes copiedMsg {
+   0% 		{ opacity:0;  }
+   50% 	{ opacity:0;  }
+   100%  	{ opacity:1;   }
+}
+
+@keyframes addLi {
+   from { width:0;  }
+   to   { width:40px;  }
+}
+
+@keyframes copiedMsg {
+   0% 		{ opacity:0;  }
+   50% 	{ opacity:0;  }
+   100%  	{ opacity:1;   }
+}
+	
+
+	
+
+	
+
+/* gradients */
+
+#recentList li input {
+		background-image: -webkit-gradient(
+			linear,
+			left top,
+			left bottom,
+			color-stop(0, #CCFFFD),
+			color-stop(1, #CCE5FF)
+		);
+		background-image: -o-linear-gradient(bottom, #CCFFFD 0%, #CCE5FF 100%);
+		background-image: -moz-linear-gradient(bottom, #CCFFFD 0%, #CCE5FF 100%);
+		background-image: -webkit-linear-gradient(bottom, #CCFFFD 0%, #CCE5FF 100%);
+		background-image: -ms-linear-gradient(bottom, #CCFFFD 0%, #CCE5FF 100%);
+		background-image: linear-gradient(to bottom, #CCFFFD 0%, #CCE5FF 100%);	
+}	
+
+#header {
+	background-image: -webkit-gradient(
+	linear,
+	left top,
+	left bottom,
+	color-stop(0, #C20047),
+	color-stop(1, #C2001D)
+);
+background-image: -o-linear-gradient(bottom, #C20047 0%, #C2001D 100%);
+background-image: -moz-linear-gradient(bottom, #C20047 0%, #C2001D 100%);
+background-image: -webkit-linear-gradient(bottom, #C20047 0%, #C2001D 100%);
+background-image: -ms-linear-gradient(bottom, #C20047 0%, #C2001D 100%);
+background-image: linear-gradient(to bottom, #C20047 0%, #C2001D 100%);
+}
+
+li input {
+
+background-image: -webkit-gradient(
+	linear,
+	left top,
+	left bottom,
+	color-stop(0, #F5F5F5),
+	color-stop(1, #EBEBEB)
+);
+background-image: -o-linear-gradient(bottom, #F5F5F5 0%, #EBEBEB 100%);
+background-image: -moz-linear-gradient(bottom, #F5F5F5 0%, #EBEBEB 100%);
+background-image: -webkit-linear-gradient(bottom, #F5F5F5 0%, #EBEBEB 100%);
+background-image: -ms-linear-gradient(bottom, #F5F5F5 0%, #EBEBEB 100%);
+background-image: linear-gradient(to bottom, #F5F5F5 0%, #EBEBEB 100%);
+
+}
+
+
+#page input:focus,
+	#page input.selected,
+	.copied#page input.selected {
+background-image: -webkit-gradient(
+	linear,
+	left top,
+	left bottom,
+	color-stop(0, #C2F5A4),
+	color-stop(1, #A3F0A5)
+);
+background-image: -o-linear-gradient(bottom, #C2F5A4 0%, #A3F0A5 100%);
+background-image: -moz-linear-gradient(bottom, #C2F5A4 0%, #A3F0A5 100%);
+background-image: -webkit-linear-gradient(bottom, #C2F5A4 0%, #A3F0A5 100%);
+background-image: -ms-linear-gradient(bottom, #C2F5A4 0%, #A3F0A5 100%);
+background-image: linear-gradient(to bottom, #C2F5A4 0%, #A3F0A5 100%);
+}
+
+
+</style>
+
+
+<div id="page" >
+
+<div id="header">
+	<h1>notonyourkeyboard.com (beta 0.3)</h1>
+</div>
+
+<h2 id="recentheading" class="recent">Recent used</h2>
+<ul id="recentList" class="recent">
+	<li class="placeholder">No recently used characters</li>
+</ul>
+
+</div>
+
+<div id="about">
+
+	<h2>What?</h2>
+	<p>
+	Notonyourkeyboard.com is lists characters that aren't on your keyboard and copies them to your clipboard with just one click. 
+	It lists popular and useful Unicode characters. 
+	It's in no way an exhaustive list of Unicode characters, but to features some the most common and useful special characters that are not easily found on keyboards.
+	
+	</p>
+
+	<h2>Why?</h2>
+	<p>
+	I got fed up with googling for dull, ugly, nerdy character tables haven't been near a designer for 15 years and that force you to copy and paste. 
+	When I need to find a character that isn't on my keyboard I wanted something that didn't make me want to rip my eyes out with late-nineties table design nostalgia. 
+	I also just wanted it to be easy to use with one-click copying. 
+	</p>
+
+
+	<h2>Who?</h2>
+	<p>
+	This is a project by <a href="http://edeverett.co.uk">Ed Everett</a> a user experience designer in London. You can <a href="http://twitter.com/edeverett" >contact me on Twitter</a>
+	</p>
+
+	<h2>Suggestions</h2>
+	<p>
+	If you think I've missed a useful characters from the list let me know <a href="http://twitter.com/edeverett" >via Twitter</a>. 
+	If I like the character and it seems useful I'll but remember this isn't trying to be exhaustive and has a focus on characters that I find useful.
+	Maybe in the future I'll find a way of creating a list that isn't just based on my personal preferences but for now it's the best I can do.
+	</p>
+	
+	<h2>Help</h2>
+	<p>
+		<strong> Some characters are just showing boxes or even not showing at all!</strong> 
+		Unfortunately your operating system or broswer doesn't support those characters. On Windows, Internet Explorer seems to support the most characters.
+	</p>
+	
+	<p>
+		<strong> Do I need flash?</strong> 
+		Without Flash you don't get one-click copying; you'll have to press Ctrl+C (Cmd+C) - not the end of the world.
+		Flash provides some access to you computer's clipboard so it's needed for automatic copying.  
+	</p>
+	
+	<p>
+		<strong> This sucks on mobile phones and tablets!</strong>
+		Yes. Unfortunately it does. 
+		iOS and Android have no automatic way to copy characters from a web page to your clipboard. 
+		You have to do that manual long-press and select thing.  
+		(Let me know if I'm wrong or this has changed. I'd love it to work better on mobiles.)
+	</p>
+	<p>
+		<strong> My browser isn't supported or something else isn't working :-( </strong>
+		For reasons of time and sanity I've had to limit which browsers I test this with to the most common current browsers. 
+		If you can I'd encourage your upgrade to the latest version of your browser, if you can't I'm sorry. 
+		If you're using a modern, mainstream, browser and something is wrong then please do let me know and I'll do my best to fix it. 
+	</p>	
+
+
+	
+	<div id="end">&#10087;</div>
+	
+<div>
+
+<script type="text/javascript">
+
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-58151689-1']);
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+<html>
